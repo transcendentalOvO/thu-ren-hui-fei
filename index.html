@@ -264,8 +264,13 @@ function tick(dt){
         if(by-HIT_R<top || by+HIT_R>bot){ gameOver(); return; }
       }
     }
-    const target = vy<0 ? -0.44 : Math.min(1.35,(vy/MAX_FALL)*1.55);
-    angle += (target-angle)*Math.min(1, dt*9);
+    // 旋转: 清华=随速度翘头/俯冲; 新雅=圆球顺时针滚动(角速度=水平速度/半径, 越玩滚越快)
+    if(mode==='xinya'){
+      angle += dt*(pipeSpeed()/R_BIRD)*1.18;
+    } else {
+      const target = vy<0 ? -0.44 : Math.min(1.35,(vy/MAX_FALL)*1.55);
+      angle += (target-angle)*Math.min(1, dt*9);
+    }
   } else if(state==='over'){
     deadT+=dt;
     vy=Math.min(MAX_FALL, vy+GRAVITY*dt*0.82);
@@ -645,7 +650,7 @@ function draw(){
 }
 
 /* ---------- 自测钩子 ---------- */
-window.__THU={ get:function(){return {state:state,birdY:birdY,vy:vy,score:score,fatigue:1,pipes:pipes.length,p0x:pipes.length?Math.round(pipes[0].x):-999,groundY:GROUND_Y,best:best,night:night,nA:Math.round(nightAmt*100)/100,mode:mode,nb:newBest};} };
+window.__THU={ get:function(){return {state:state,birdY:birdY,vy:vy,score:score,fatigue:1,pipes:pipes.length,p0x:pipes.length?Math.round(pipes[0].x):-999,groundY:GROUND_Y,best:best,night:night,nA:Math.round(nightAmt*100)/100,mode:mode,nb:newBest,angle:Math.round(angle*100)/100};} };
 
 requestAnimationFrame(function(now){ last=now; requestAnimationFrame(frame); });
 })();
