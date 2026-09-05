@@ -57,15 +57,21 @@ window.addEventListener('resize',function(){ fit(); applyResolution(); });
 window.addEventListener('orientationchange',function(){ setTimeout(function(){ fit(); applyResolution(); },120); });
 fit(); applyResolution();
 
-/* 校徽图片 */
+/* 校徽图片 / 玩家头像球 */
 const logo=new Image();
 logo.src='tsinghua_logo.svg';
+const avatar=new Image();
+avatar.src='avatar_ball.png';
+function ballImage(){
+  if(avatar.complete && avatar.naturalWidth>0) return avatar;
+  return logo;
+}
 
 /* ---------- 常量 ---------- */
 const GRAVITY=1720, FLAP_BASE=540, MAX_FALL=840;
 const GROUND_H=92, GROUND_Y=H-GROUND_H;
 const BX=126, R_BIRD=28;
-const HIT_R=29;                       // 判定≈视觉白环(带一点宽容), 蹭到盖沿也会死
+const HIT_R=26;                       // 判定半径 = 视觉半径的 9/10 (更宽容一点)
 const PIPE_W=68, PIPE_GAP0=226, PIPE_GAP_MIN=170, PIPE_SPEED0=150, PIPE_SPEED_MAX=330;
 const NIGHT_SCORE=20;                 // 满20分进入夜间
 
@@ -76,7 +82,7 @@ let score=0, flash=0;
 let pipes=[], dist=0, groundX=0;
 let clouds=[], parts=[];
 let deadT=0, newBest=false, muted=false;
-let night=false, nightAmt=0, banner=0;   // 夜间开关 / 渐变进度 / 转场横幅
+let night=false, nightAmt=0;   // 夜间开关 / 渐变进度(仅背景变化, 无字幕无弹窗)
 let best=+(localStorage.getItem('thu_best')||0);
 let history=[];
 try{ history=JSON.parse(localStorage.getItem('thu_hist')||'[]'); }catch(e){ history=[]; }
@@ -103,7 +109,6 @@ function sfxFlap(){ tone(300,640,.13,'triangle',.11); }
 function sfxPoint(){ tone(880,880,.08,'sine',.12); setTimeout(function(){tone(1318,1318,.15,'sine',.10);},70); }
 function sfxHit(){ tone(210,55,.38,'sawtooth',.20); }
 function sfxNew(){ [660,880,1108,1318].forEach(function(f,i){ setTimeout(function(){tone(f,f,.18,'triangle',.12);},i*90); }); }
-function sfxNight(){ [392,523,659,784].forEach(function(f,i){ setTimeout(function(){tone(f,f,.3,'sine',.10);},i*130); }); }
 
 /* ---------- 音效按钮 ---------- */
 const muteRect={x:W-48,y:10,w:38,h:38};
@@ -156,13 +161,10 @@ function outlineText(str,x,y,size,color,line,align,bold){
 function flap(){ vy=-FLAP_BASE; sfxFlap(); }
 function startGame(){
   score=0; birdY=300; vy=0; angle=0; flash=0; newBest=false; bob=0;
-  night=false; nightAmt=0; banner=0;
+  night=false; nightAmt=0;
   resetPipes(); parts=[]; state='play'; deadT=0;
 }
-function enterNight(){
-  night=true; banner=2.4; sfxNight();
-  burst(BX,birdY,20,['#9ff0ff','#F6BB60','#ffffff']);
-}
+function enterNight(){ night=true; }
 function gameOver(){
   state='over'; deadT=0; sfxHit();
   burst(BX,birdY,24,['#F6BB60','#ffffff','#d9a6f2']);
@@ -243,10 +245,9 @@ function tick(dt){
   } else {
     bob=Math.sin(performance.now()/430)*7;
   }
-  /* 夜间渐变 & 横幅 */
+  /* 夜间渐变(纯背景过渡) */
   nightAmt+=(night?1:-1)*dt*0.9;
   if(nightAmt<0) nightAmt=0; if(nightAmt>1) nightAmt=1;
-  if(banner>0) banner-=dt;
   for(let i=parts.length-1;i>=0;i--){
     const p=parts[i]; p.t+=dt;
     if(p.t>p.life){ parts.splice(i,1); continue; }
@@ -457,7 +458,7 @@ function drawGround(n){
   });
 }
 /* --- 校徽(球): 夜间更亮 --- */
-function drawLogo(cx,cy,r,rot,nA){
+function drawLogo(cx,cy,r,rot,nA,avatarOn){
   const glowUp = vy<0? Math.min(1,-vy/900):0;
   const halo = (nA*.62+glowUp*.4);
   ctx.save();
@@ -476,12 +477,13 @@ function drawLogo(cx,cy,r,rot,nA){
   ctx.fillStyle='rgba(255,255,255,'+(0.97-0.06*nA)+')'; ctx.fill();
   ctx.lineWidth=Math.max(2.2,r*.1); ctx.strokeStyle=ring; ctx.stroke();
   if(nA>0.5){ ctx.lineWidth=1; ctx.strokeStyle='rgba(255,245,220,.95)'; ctx.stroke(); }
-  if(logo.complete&&logo.naturalWidth>0){
-    const d=r*2.16;
+  const img = avatarOn ? ballImage() : logo;
+  if(img.complete&&img.naturalWidth>0){
+    const d = img===avatar ? r*2.10 : r*2.16;   // 头像球贴纸全幅圆形
     ctx.save();
     ctx.beginPath(); ctx.arc(0,0,r*1.05,0,7); ctx.clip();
-    ctx.drawImage(logo,-d/2,-d/2,d,d);
-    if(nA>0.4){ ctx.globalAlpha=(nA-0.4)*.5; ctx.fillStyle='#ffe9c0';
+    ctx.drawImage(img,-d/2,-d/2,d,d);
+    if(img===logo && avatarOn && nA>0.4){ ctx.globalAlpha=(nA-0.4)*.5; ctx.fillStyle='#ffe9c0';
       ctx.beginPath(); ctx.arc(0,0,r*.9,0,7); ctx.fill(); ctx.globalAlpha=1; }
     ctx.restore();
   }else{
@@ -492,7 +494,7 @@ function drawLogo(cx,cy,r,rot,nA){
   }
   ctx.restore();
 }
-function drawBird(){ drawLogo(BX,birdY+bob,R_BIRD,angle,nightAmt); }
+function drawBird(){ drawLogo(BX,birdY+bob,R_BIRD,angle,nightAmt,true); }
 function drawParticles(){
   parts.forEach(function(p){
     ctx.globalAlpha=Math.max(0,1-p.t/p.life);
@@ -519,22 +521,13 @@ function drawHUD(){
   if(flash>0&&state!=='over'){
     ctx.globalAlpha=Math.min(1,flash); outlineText('+1',BX+44,birdY-52,30,'#F6BB60','rgba(70,18,115,.85)'); ctx.globalAlpha=1;
   }
-  /* 夜幕横幅 */
-  if(banner>0&&state==='play'){
-    const a=Math.min(1,banner*1.2);
-    ctx.globalAlpha=a;
-    ctx.fillStyle='rgba(10,8,40,.55)'; rr(W/2-160,215,320,64,20); ctx.fill();
-    ctx.strokeStyle='rgba(180,200,255,.8)'; ctx.lineWidth=2; rr(W/2-160,215,320,64,20); ctx.stroke();
-    outlineText('🌙 夜幕降临 · 二校门',W/2,247,24,'#eaf0ff','rgba(20,16,70,.9)','center',true);
-    ctx.globalAlpha=1;
-  }
 }
 function drawMenu(){
   ctx.fillStyle='rgba(255,255,255,.88)';
   rr(W/2-160,26,320,396,26); ctx.fill();
   ctx.strokeStyle='rgba(146,7,131,.20)'; ctx.lineWidth=2; rr(W/2-160,26,320,396,26); ctx.stroke();
   ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1; rr(W/2-158,28,316,392,25); ctx.stroke();
-  drawLogo(W/2,92,36,0,0);
+  drawLogo(W/2,92,36,0,0,false);
   outlineText('清华人会飞',W/2,148,40,'#5b1f8f','#ffffff','center',true);
   text('Flappy THU · 紫荆校徽飞越水管',W/2,176,13,'rgba(90,26,140,.7)');
   chip(W/2,212,'点按 / 空格 = 起飞','rgba(146,7,131,.10)');
@@ -554,7 +547,7 @@ function drawMenu(){
   text('开 始 游 戏',W/2,by0+24,'#ffffff',undefined,true);
 }
 function drawOver(){
-  drawLogo(BX,birdY,R_BIRD,angle,nightAmt);
+  drawLogo(BX,birdY,R_BIRD,angle,nightAmt,true);
   if(deadT>0.45){
     ctx.fillStyle='rgba(18,10,40,.55)'; ctx.fillRect(0,0,W,H);
     const ny=newBest?36:0;
