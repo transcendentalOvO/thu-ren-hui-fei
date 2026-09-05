@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="description" content="清华人会飞 - Flappy Bird 风格的清华大学校徽小游戏。校徽躲避水管,满20分夜访二校门,速度越来越快!" />
 <meta name="theme-color" content="#241040" />
-<title>清华人会飞</title>
+<title>清华人会飞 · 新雅人会飞</title>
 <link rel="icon" href="tsinghua_logo.svg" type="image/svg+xml" />
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -83,9 +83,17 @@ let pipes=[], dist=0, groundX=0;
 let clouds=[], parts=[];
 let deadT=0, newBest=false, muted=false;
 let night=false, nightAmt=0;   // 夜间开关 / 渐变进度(仅背景变化, 无字幕无弹窗)
-let best=+(localStorage.getItem('thu_best')||0);
-let history=[];
+let mode='thu';                 // 'thu' 清华人会飞 | 'xinya' 新雅人会飞
+let bestThu=+(localStorage.getItem('thu_best')||0);
+let bestXy =+(localStorage.getItem('xinya_best')||0);
+let best=bestThu, history=[];
 try{ history=JSON.parse(localStorage.getItem('thu_hist')||'[]'); }catch(e){ history=[]; }
+function applyMode(m){
+  mode = (m==='xinya') ? 'xinya' : 'thu';
+  if(mode==='xinya'){ best=bestXy; try{ history=JSON.parse(localStorage.getItem('xinya_hist')||'[]'); }catch(e){ history=[]; } }
+  else { best=bestThu; try{ history=JSON.parse(localStorage.getItem('thu_hist')||'[]'); }catch(e){ history=[]; } }
+}
+function modeTitle(){ return mode==='xinya' ? '新雅人会飞' : '清华人会飞'; }
 if(localStorage.getItem('thu_mute')==='1') muted=true;
 
 /* 星星(夜间) */
@@ -159,7 +167,8 @@ function outlineText(str,x,y,size,color,line,align,bold){
 
 /* ---------- 游戏控制 ---------- */
 function flap(){ vy=-FLAP_BASE; sfxFlap(); }
-function startGame(){
+function startGame(m){
+  applyMode(m);
   score=0; birdY=300; vy=0; angle=0; flash=0; newBest=false; bob=0;
   night=false; nightAmt=0;
   resetPipes(); parts=[]; state='play'; deadT=0;
@@ -170,23 +179,41 @@ function gameOver(){
   burst(BX,birdY,24,['#F6BB60','#ffffff','#d9a6f2']);
   try{
     history.unshift({s:score,t:Date.now()}); history=history.slice(0,8);
-    localStorage.setItem('thu_hist',JSON.stringify(history));
-    if(score>best){ best=score; newBest=true; localStorage.setItem('thu_best',best); setTimeout(sfxNew,150); }
+    localStorage.setItem(mode==='xinya'?'xinya_hist':'thu_hist', JSON.stringify(history));
+    if(score>best){
+      best=score; newBest=true;
+      if(mode==='xinya') bestXy=score; else bestThu=score;
+      localStorage.setItem(mode==='xinya'?'xinya_best':'thu_best', best);
+      setTimeout(sfxNew,150);
+    }
   }catch(e){}
 }
 
 /* ---------- 输入 ---------- */
-function screenTap(){
-  if(state==='menu'){ startGame(); return; }
-  if(state==='play'){ flap(); return; }
-  if(state==='over' && deadT>0.55){ startGame(); }
+const cardThu={x:60,y:70,w:300,h:128};
+const cardXy ={x:60,y:216,w:300,h:128};
+function cardAt(x,y){
+  function inR(r){ return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h; }
+  if(inR(cardThu)) return 'thu';
+  if(inR(cardXy)) return 'xinya';
+  return null;
 }
 function handleDown(x,y){
   if(x>=muteRect.x&&x<=muteRect.x+muteRect.w&&y>=muteRect.y&&y<=muteRect.y+muteRect.h){
     muted=!muted; localStorage.setItem('thu_mute',muted?'1':'0'); return;
   }
-  if(state==='over'&&deadT<=0.55) return;
-  screenTap();
+  if(state==='menu'){
+    const m=cardAt(x,y);
+    if(m) startGame(m);          // 点卡片选模式开玩
+    return;
+  }
+  if(state==='play'){ flap(); return; }
+  if(state==='over'){
+    if(deadT<=0.55) return;
+    const sy=newBest?418:384;    // 「换个模式」小按钮
+    if(x>=W/2-95&&x<=W/2+95&&y>=sy-11&&y<=sy+11){ state='menu'; return; }
+    startGame(mode);             // 再飞一次(同模式)
+  }
 }
 canvas.addEventListener('pointerdown',function(e){
   ac();
@@ -197,7 +224,9 @@ canvas.addEventListener('pointerdown',function(e){
 canvas.addEventListener('contextmenu',function(e){ e.preventDefault(); });
 window.addEventListener('keydown',function(e){
   if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){
-    e.preventDefault(); ac(); handleDown(-1,-1);
+    e.preventDefault(); ac();
+    if(state==='menu') startGame(mode);      // 空格默认进入当前高亮模式
+    else handleDown(-1,-1);
   }
 });
 
@@ -494,7 +523,7 @@ function drawLogo(cx,cy,r,rot,nA,avatarOn){
   }
   ctx.restore();
 }
-function drawBird(){ drawLogo(BX,birdY+bob,R_BIRD,angle,nightAmt,true); }
+function drawBird(){ drawLogo(BX,birdY+bob,R_BIRD,angle,nightAmt,mode==='xinya'); }
 function drawParticles(){
   parts.forEach(function(p){
     ctx.globalAlpha=Math.max(0,1-p.t/p.life);
@@ -523,31 +552,46 @@ function drawHUD(){
   }
 }
 function drawMenu(){
-  ctx.fillStyle='rgba(255,255,255,.88)';
-  rr(W/2-160,26,320,396,26); ctx.fill();
-  ctx.strokeStyle='rgba(146,7,131,.20)'; ctx.lineWidth=2; rr(W/2-160,26,320,396,26); ctx.stroke();
-  ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1; rr(W/2-158,28,316,392,25); ctx.stroke();
-  drawLogo(W/2,92,36,0,0,false);
-  outlineText('清华人会飞',W/2,148,40,'#5b1f8f','#ffffff','center',true);
-  text('Flappy THU · 紫荆校徽飞越水管',W/2,176,13,'rgba(90,26,140,.7)');
-  chip(W/2,212,'点按 / 空格 = 起飞','rgba(146,7,131,.10)');
-  chip(W/2,240,'穿过水管 +1 分','rgba(246,187,96,.22)','#8a5a00');
-  chip(W/2,268,'速度越来越快 · 永不停歇','rgba(90,26,140,.12)');
-  chip(W/2,296,'满 20 分 → 夜访二校门 🌙','rgba(90,80,190,.14)','#3a2f8f');
-  text('个人最佳',W/2-95,338,12,'rgba(90,26,140,.6)');
-  outlineText(String(best),W/2+40,338,26,'#920783','#ffffff');
-  ctx.fillStyle='rgba(90,26,140,.45)'; ctx.font='500 10px "PingFang SC","Microsoft YaHei",sans-serif'; ctx.textAlign='center';
-  ctx.fillText('最近: '+(history.length?history.map(function(h){return h.s;}).join(' · '):'—'),W/2,360);
-  const by0=372;
-  const bg=ctx.createLinearGradient(0,by0,0,by0+46);
-  bg.addColorStop(0,'#a53fd0'); bg.addColorStop(1,'#700ba3');
-  ctx.fillStyle=bg; rr(W/2-100,by0,200,46,23); ctx.fill();
-  ctx.strokeStyle='rgba(246,187,96,.75)'; ctx.lineWidth=2; rr(W/2-100,by0,200,46,23); ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,.32)'; rr(W/2-84,by0+6,168,9,4); ctx.fill();
-  text('开 始 游 戏',W/2,by0+24,'#ffffff',undefined,true);
+  // 背板
+  ctx.fillStyle='rgba(255,255,255,.92)';
+  rr(W/2-164,14,328,440,28); ctx.fill();
+  ctx.strokeStyle='rgba(146,7,131,.18)'; ctx.lineWidth=2; rr(W/2-164,14,328,440,28); ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1; rr(W/2-162,16,324,436,27); ctx.stroke();
+  text('选择你的校徽 · 开始游戏',W/2,36,18,'#5b1f8f','center',true);
+  text('两种模式 · 成绩分开记录 · 同样飞向二校门之夜',W/2,56,10.5,'rgba(90,26,140,.55)');
+  // 模式卡片
+  function card(r,ball,t,sub,bestVal,tc,bc,ac){
+    rr(r.x,r.y,r.w,r.h,22);
+    ctx.fillStyle=bc; ctx.fill();
+    ctx.strokeStyle=tc; ctx.lineWidth=2; rr(r.x,r.y,r.w,r.h,22); ctx.stroke();
+    drawLogo(r.x+52,r.y+r.h/2,27,0,0,ball);
+    const tx=r.x+96;
+    ctx.fillStyle=ac;
+    ctx.font='800 26px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(t,tx,r.y+42);
+    ctx.font='600 12px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle='rgba(60,40,90,.6)';
+    ctx.fillText(sub,tx,r.y+70);
+    ctx.font='700 14px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle=ac;
+    ctx.fillText('🏆 最佳 '+bestVal,tx,r.y+100);
+    ctx.font='700 20px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle=tc;
+    ctx.fillText('▶',r.x+r.w-30,r.y+r.h/2+1);
+  }
+  card(cardThu,false,'清华人会飞','紫荆校徽 · 经典挑战',bestThu,
+       'rgba(146,7,131,.55)','rgba(146,7,131,.06)','#6a1f96');
+  card(cardXy,true,'新雅人会飞','红色头像 · 新雅之夜挑战',bestXy,
+       'rgba(196,64,48,.6)','rgba(196,64,48,.07)','#b23a2e');
+  // 玩法提示
+  ctx.textAlign='center';
+  text('点按 / 空格 起飞 · 穿过水管 +1 · 速度渐快',W/2,372,12.5,'rgba(90,26,140,.85)');
+  text('满 20 分 → 背景悄然入夜 · 星空 & 二校门(无弹窗)',W/2,394,11.5,'rgba(90,26,140,.6)');
+  text('云开雾散, 一路到天亮都可以飞 ~',W/2,420,10.5,'rgba(90,26,140,.42)');
 }
 function drawOver(){
-  drawLogo(BX,birdY,R_BIRD,angle,nightAmt,true);
+  drawLogo(BX,birdY,R_BIRD,angle,nightAmt,mode==='xinya');
   if(deadT>0.45){
     ctx.fillStyle='rgba(18,10,40,.55)'; ctx.fillRect(0,0,W,H);
     const ny=newBest?36:0;
@@ -569,7 +613,10 @@ function drawOver(){
     ctx.fillStyle=bg; rr(W/2-105,by0,210,48,24); ctx.fill();
     ctx.strokeStyle='rgba(246,187,96,.75)'; ctx.lineWidth=2; rr(W/2-105,by0,210,48,24); ctx.stroke();
     text('再飞一次 ↑',W/2,by0+25,'#ffffff',undefined,true);
-    text('(空格也可以)',W/2,by0+66,10,'rgba(90,26,140,.5)');
+    const sy=newBest?418:384;
+    ctx.fillStyle='rgba(255,255,255,.55)'; rr(W/2-95,sy-11,190,22,11); ctx.fill();
+    ctx.strokeStyle='rgba(90,26,140,.3)'; ctx.lineWidth=1; rr(W/2-95,sy-11,190,22,11); ctx.stroke();
+    text('⌂ 换个模式',W/2,sy,12,'rgba(90,26,140,.75)');
   }
 }
 
@@ -585,7 +632,7 @@ function draw(){
   sceneTheme(0);
   if(nightAmt>0.02){ ctx.globalAlpha=nightAmt; sceneTheme(1); ctx.globalAlpha=1; }
   drawParticles();
-  drawBird();
+  if(state!=='menu') drawBird();
   drawGround(0);
   if(nightAmt>0.02){ ctx.globalAlpha=nightAmt; drawGround(1); ctx.globalAlpha=1; }
   drawHUD();
@@ -594,7 +641,7 @@ function draw(){
 }
 
 /* ---------- 自测钩子 ---------- */
-window.__THU={ get:function(){return {state:state,birdY:birdY,vy:vy,score:score,fatigue:1,pipes:pipes.length,p0x:pipes.length?Math.round(pipes[0].x):-999,groundY:GROUND_Y,best:best,night:night,nA:Math.round(nightAmt*100)/100};} };
+window.__THU={ get:function(){return {state:state,birdY:birdY,vy:vy,score:score,fatigue:1,pipes:pipes.length,p0x:pipes.length?Math.round(pipes[0].x):-999,groundY:GROUND_Y,best:best,night:night,nA:Math.round(nightAmt*100)/100,mode:mode,nb:newBest};} };
 
 requestAnimationFrame(function(now){ last=now; requestAnimationFrame(frame); });
 })();
