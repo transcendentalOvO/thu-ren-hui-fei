@@ -264,9 +264,9 @@ function tick(dt){
         if(by-HIT_R<top || by+HIT_R>bot){ gameOver(); return; }
       }
     }
-    // 旋转: 清华=随速度翘头/俯冲; 新雅=圆球顺时针滚动(角速度=水平速度/半径, 越玩滚越快)
+    // 旋转: 清华=随速度翘头/俯冲; 新雅=圆球持续顺时针滚动(与点击/升降无关, 角速度=水平速度/半径)
     if(mode==='xinya'){
-      angle += dt*(pipeSpeed()/R_BIRD)*1.18;
+      angle += dt*Math.min(9.5, (pipeSpeed()/R_BIRD)*1.35);
     } else {
       const target = vy<0 ? -0.44 : Math.min(1.35,(vy/MAX_FALL)*1.55);
       angle += (target-angle)*Math.min(1, dt*9);
